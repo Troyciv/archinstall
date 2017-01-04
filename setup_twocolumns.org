@@ -1,0 +1,13 @@
+#+OPTIONS: toc:nil num:2 author:nil date:nil
+#+LATEX_CLASS: article
+#+LATEX_CLASS_OPTIONS: [a4paper]
+# page styling
+#+LATEX_HEADER: \pagestyle{empty}
+#+LATEX_HEADER: \usepackage[margin=2cm,]{geometry}
+#+LATEX_HEADER: \usepackage{multicol,pdflscape}
+#+LATEX_HEADER: \setlength{\columnsep}{50pt}
+#+LATEX_HEADER: \setlength{\columnseprule}{1pt}
+# table styling
+# #+LATEX_HEADER: \usepackage{booktabs, multirow,}
+# #+LATEX_HEADER: \usepackage[table]{xcolor}
+# #+LATEX_HEADER: \definecolor{contiYellow}{RGB}{255,180,0}

@@ -1,0 +1,318 @@
+#+TITLE:Arch Install 
+#+SETUPFILE: setup_twocolumns.org
+ Cheat-Sheet for Arch install on one hdd with MBR, ecrypt with LVM on LUKS with dm-crypt, /boot unencrypted
+
+TODO:
+  * half skip between lines
+  * no indention for new lines
+  * which fs for /boot
+  * ssd specialities
+#+LATEX: \begin{multicols}{2}
+** Pre-Installation
+*** set keyboard
+    list available layouts: 
+
+    ~# ls /usr/share/kdb/keymaps/**/*.map.gz~ 
+
+    change layout
+
+    ~# setkeyboard de-latin1~
+
+*** verify boot mode
+    ~# ls /sys/firmware/efi/efivars~
+*** Internet connection
+**** wired
+**** wifi
+*** update system clock
+   ~# timedatectl set-ntp true~
+
+   ~# timedatectl status~
+*** partition[fn:2]
+
+    list partitions
+
+    ~# fdisk -l~ or ~# lsblk~
+
+    disk preparation[fn:3] 
+
+**** with parted[fn:4]
+
+     ~# parted /dev/sda~
+
+     general
+
+     ~# help~
+     
+     ~# print~
+
+     make mbr table
+     ~# mklabel msdos~
+
+     create boot partition
+
+     ~# mkpart primary ext3 1mb 512MiB~
+
+     ~# set 1 boot on~
+
+     create partition for LUKS-encryption
+
+     ~# mkpart primary ext3 512MiB 100%~
+
+     check
+
+     ~# print~
+
+*** Disk-Encryption[fn:5][fn:6] 
+
+    this shows the "LVM on LUKS" method
+
+     check, if module is loaded
+     
+     ~# lsmod | grep dm_crypt~ 
+
+     if not, load module
+
+     ~# modprobe dm-crypt~
+
+     create LUKS partition
+
+     ~# cryptsetup -s 512 luksFormat /dev/sda2~
+
+     check results
+
+     ~# cryptsetup luksDump /dev/sda2~
+
+     open
+
+     ~# cryptsetup luksOpen /dev/sda2 cryptolvm~
+
+     create LVM volume
+
+     ~# pvcreate /dev/mapper/cryptolvm~
+
+     create LVM group
+
+     ~# vgcreate myvol /dev/mapper/cryptolvm~
+
+     create root partition
+
+     ~# lvcreate -L 3G myvol -n root~
+
+     optional: add swap partition
+
+     create home parition
+
+
+     ~# lvcreate -l 100%FREE myvol -n home~
+
+     
+     
+*** format partitions
+
+    ~# mkfs.ext4 /dev/mapper/myvol-root~
+    
+    ~# mkfs.ext4 /dev/mapper/myvol-home~
+
+    ~# mkfs.ext2 /dev/sda1~
+*** mount partitions
+
+   ~# mount /dev/mapper/myvol-root /mnt~
+
+   ~# mkdir /mnt/home~
+
+   ~# mount /dev/mapper/myvol-home /mnt/home~
+
+   mount unencrypted boot partition
+   
+   ~# mkdir /mnt/boot~
+
+   ~# mount /dev/sda1 /mnt/boot~
+
+   be aware on the necessary configuration during initramfs-creation and boot-loader
+
+
+
+** Installation
+*** select mirrors
+    ~# vim /etc/pacman.d/mirrorlist~
+    
+    rank mirrors
+
+    ~# cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.bak~
+
+    ~# rankmirrors -n 6 /etc/pacman.d/mirrorlist.bak > /etc/pacman.d/mirrorlist~
+
+*** install base system
+
+    ~# pacstrap /mnt base~
+
+** Configuration 
+*** fstab
+
+    ~# genfstab -U /mnt >> /etc/fstab~
+
+*** chroot
+
+    ~# arch-chroot /mnt~
+
+*** time zone
+    
+    ~# ln -s /usr/share/zoneinfo/Europe/Berlin /etc/localtime~
+
+*** locale/language/keyboard
+    Locale
+
+    ~# vim /etc/locale.gen~
+
+    ~# locale-gen~
+
+    Language
+
+
+    ~# vim /etc/locale.conf~
+    
+    edit ~LANG=en_US.UTF-8~
+
+    Keyboard
+
+    ~# vim etc/vconsole.conf~
+    
+    Edit ~KEYMAP=de-latin1~
+    
+    
+
+*** hostname
+    ~# vim /etc/hostname~
+
+    ~# vim /etc/hosts~
+*** network config
+*** initramfs[fn:1][fn:14] 
+
+   some changes are necessary due to the encryption setup. the order is important!
+
+    ~# vim /etc/mkinitcpio.conf~
+
+    ~# HOOKS="... *keyboard keymap* block *encrypt lvm2* ... filesystems ..."~
+
+    ~# mkinitcpio -p linux~
+*** set root password
+    ~# passwd~
+
+*** boot loader[fn:9] 
+
+    ~# pacman -S grub~
+
+    ~# grub-install --target=i386-pc /dev/sda~
+
+    get uuid of sda2
+
+    ~# blkid  | grep sda2~
+
+    ~# vi /etc/default/grub~
+
+    change ~GRUB_CMDLINE_LINUX="cryptdevice=UUID=*device-uuid*:cryptolvm"~[fn:10][fn:11][fn:13] 
+
+    ~# grub-mkconfig -o /boot/grub/grub.cfg~
+
+    some warnings are ok[fn:12] 
+
+    install intel-ucode
+
+    ~# pacman -S intel-ucode~
+
+*** Swap file[fn:7][fn:8] 
+    
+    ~# fallocate -l 1024M /swapfile~
+
+    ~# chmod 600 /swapfile~
+
+    ~# mkswap /swapfile~
+
+    ~# swapon /swapfile~
+
+    ~# vim /etc/fstab~
+    
+    ~/swapfile none swap defaults 0 0~
+
+** Reboot
+
+   ~# exit~
+
+   ~# umount -R /mnt~
+
+   ~# reboot~
+
+ 
+** Post-installation
+*** User and groups[fn:18] 
+*** Security[fn:19] 
+*** Pacman
+*** Booting
+*** GUI
+**** setting up X
+**** display drivers
+**** lightdm
+**** Desktop environment
+*** Sound
+*** Network[fn:16] 
+    
+    check network
+
+    ~ping 8.8.8.8~
+
+    show detwork devices
+
+    ~ip link~
+
+    setting up dhcpcd [fn:15]
+*** Systemd[fn:17] 
+**** limit journal size
+    
+     ~# vim /etc/systemd/journald.conf~
+
+     edit ~SystemMaxUse=50M~
+*** setting up Bash
+*** Power management
+
+#+LATEX:\end{multicols}
+
+*** Backups
+* Footnotes
+
+[fn:19] https://wiki.archlinux.org/index.php/Sudo
+
+[fn:18] https://wiki.archlinux.org/index.php/Users_and_groups
+
+[fn:17] https://wiki.archlinux.org/index.php/Systemd
+
+[fn:16] https://wiki.archlinux.org/index.php/Network_configuration#Configure_the_IP_address
+
+[fn:15] https://wiki.archlinux.org/index.php/Dhcpcd
+
+[fn:14] https://wiki.archlinux.org/index.php/Dm-crypt/System_configuration#mkinitcpio
+
+[fn:13] https://wiki.archlinux.org/index.php/GRUB#Root_partition
+
+[fn:12] https://wiki.archlinux.org/index.php/GRUB#Warning_when_installing_in_chroot
+
+[fn:11] https://wiki.archlinux.org/index.php/Persistent_block_device_naming
+
+[fn:10]https://wiki.archlinux.org/index.php/Dm-crypt/System_configuration#Boot_loader
+
+[fn:9] https://wiki.archlinux.org/index.php/GRUB
+
+[fn:8]https://wiki.archlinux.org/index.php/Swap#Swap_file
+
+[fn:7]https://wiki.archlinux.org/index.php/Dm-crypt/Swap_encryption#LVM_on_LUKS
+
+[fn:1]https://wiki.archlinux.org/index.php/Dm-crypt/System_configuration#mkinitcpio
+
+[fn:2][[https://wiki.archlinux.org/index.php/Partitioning]]
+
+[fn:3]https://wiki.archlinux.org/index.php/Dm-crypt/Drive_preparation#dm-crypt_wipe_on_an_empty_disk_or_partition
+
+[fn:4][[https://wiki.archlinux.org/index.php/GNU_Parted]] 
+
+[fn:5][[https://wiki.archlinux.org/index.php/Dm-crypt]]
+
+[fn:6]https://wiki.archlinux.org/index.php/Dm-crypt/Encrypting_an_entire_syste
